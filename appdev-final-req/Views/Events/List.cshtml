@@ -74,6 +74,18 @@
     .modal-footer {
         border-color: var(--border-color);
     }
+
+    .pagination .page-link {
+        background-color: var(--card-bg);
+        color: var(--link-color);
+        border: 1px solid var(--border-color);
+    }
+
+    .pagination .active .page-link {
+        background-color: var(--link-color);
+        color: #fff;
+        border-color: var(--link-color);
+    }
 </style>
 
 <h1 class="text-center">📅 @ViewData["Title"]</h1>
@@ -106,14 +118,14 @@
         <thead>
             <tr>
                 <th><input type="checkbox" id="selectAll" /></th>
-                <th><div class="d-flex align-items-center gap-1" onclick="sortTable(1)" style="cursor:pointer;"><span>ID</span><span id="sortIcon1"></span></div></th>
-                <th><div class="d-flex align-items-center gap-1" onclick="sortTable(2)" style="cursor:pointer;"><span>Event Title</span><span id="sortIcon2"></span></div></th>
-                <th><div class="d-flex align-items-center gap-1" onclick="sortTable(3)" style="cursor:pointer;"><span>Description</span><span id="sortIcon3"></span></div></th>
-                <th><div class="d-flex align-items-center gap-1" onclick="sortTable(4)" style="cursor:pointer;"><span>Event Date</span><span id="sortIcon4"></span></div></th>
+                <th onclick="sortTable(1)">ID <span id="sortIcon1" class="sort-icon"></span></th>
+                <th onclick="sortTable(2)">Event Title <span id="sortIcon2" class="sort-icon"></span></th>
+                <th onclick="sortTable(3)">Description <span id="sortIcon3" class="sort-icon"></span></th>
+                <th onclick="sortTable(4)">Event Date <span id="sortIcon4" class="sort-icon"></span></th>
                 <th class="text-center">Actions</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="tableBody">
             @foreach (var eventz in Model)
             {
                 <tr>
@@ -129,6 +141,59 @@
             }
         </tbody>
     </table>
+
+    <!-- Pagination Controls -->
+    @if (ViewBag.TotalPages > 1)
+    {
+        <nav class="d-flex justify-content-center mt-3">
+            <ul class="pagination" id="paginationControls">
+                
+                <li class="page-item @(ViewBag.CurrentPage == 1 ? "disabled" : "")">
+                    <a href="#" class="page-link" onclick="loadPage(@(ViewBag.CurrentPage - 1)); return false;">Previous</a>
+                </li>
+
+                @* Always show first page *@
+                <li class="page-item @(ViewBag.CurrentPage == 1 ? "active" : "")">
+                    <a href="#" class="page-link" onclick="loadPage(1); return false;">1</a>
+                </li>
+
+                @* Left Ellipsis *@
+                @if (ViewBag.CurrentPage > 6)
+                {
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                }
+
+                @* Pages around current (±5) *@
+                @for (int i = ViewBag.CurrentPage - 5; i <= ViewBag.CurrentPage + 5; i++)
+                {
+                    if (i > 1 && i < ViewBag.TotalPages)
+                    {
+                        <li class="page-item @(i == ViewBag.CurrentPage ? "active" : "")">
+                            <a href="#" class="page-link" onclick="loadPage(@i); return false;">@i</a>
+                        </li>
+                    }
+                }
+
+                @* Right Ellipsis *@
+                @if (ViewBag.CurrentPage < ViewBag.TotalPages - 5)
+                {
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                }
+
+                @* Last Page (only show if > 1) *@
+                @if (ViewBag.TotalPages > 1)
+                {
+                    <li class="page-item @(ViewBag.CurrentPage == ViewBag.TotalPages ? "active" : "")">
+                        <a href="#" class="page-link" onclick="loadPage(@ViewBag.TotalPages); return false;">@ViewBag.TotalPages</a>
+                    </li>
+                }
+
+                <li class="page-item @(ViewBag.CurrentPage == ViewBag.TotalPages ? "disabled" : "")">
+                    <a href="#" class="page-link" onclick="loadPage(@(ViewBag.CurrentPage + 1)); return false;">Next</a>
+                </li>
+            </ul>
+        </nav>
+    }
 </div>
 
 <!-- Import Modal -->
@@ -182,17 +247,20 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
+        // Select all checkbox logic
         document.getElementById("selectAll").addEventListener("change", function () {
             const checkboxes = document.querySelectorAll(".row-checkbox");
             checkboxes.forEach(cb => cb.checked = this.checked);
         });
 
-        document.getElementById("deleteSelectedForm").addEventListener("submit", function () {
+        // Update selected IDs before form submission
+        document.getElementById("deleteSelectedForm").addEventListener("submit", function (e) {
             const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
             const ids = Array.from(checkedBoxes).map(cb => cb.value);
             document.getElementById("selectedIdsInput").value = ids.join(",");
         });
 
+        // Enable/disable delete button and update modal text
         document.querySelectorAll(".row-checkbox, #selectAll").forEach(cb => {
             cb.addEventListener("change", function () {
                 const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
@@ -208,6 +276,7 @@
             });
         });
 
+        // Sorting logic
         let sortDirection = {};
         let lastSortedCol = null;
 
@@ -227,7 +296,7 @@
                 }
 
                 if (!isNaN(aText) && !isNaN(bText)) {
-                    return sortDirection[columnIndex] ? parseFloat(aText) - parseFloat(bText) : parseFloat(bText) - parseFloat(aText);
+                    return sortDirection[columnIndex] ? aText - bText : bText - aText;
                 }
 
                 return sortDirection[columnIndex] ? aText.localeCompare(bText) : bText.localeCompare(aText);
@@ -243,13 +312,13 @@
             const icon = sortDirection[columnIndex]
                 ? '<i class="bi bi-caret-up-fill"></i>'
                 : '<i class="bi bi-caret-down-fill"></i>';
-
             const iconSpan = document.getElementById(`sortIcon${columnIndex}`);
             if (iconSpan) iconSpan.innerHTML = icon;
 
             lastSortedCol = columnIndex;
         }
 
+        // Auto-reopen modal if UploadMessage exists
         window.addEventListener("DOMContentLoaded", function () {
             const hasUploadMessage = '@TempData["UploadMessage"]' !== '';
             if (hasUploadMessage) {
@@ -257,5 +326,45 @@
                 importModal.show();
             }
         });
+
+        function loadPage(page) {
+            const search = document.querySelector('input[name="search"]').value;
+
+            fetch(`/Events/List?page=${page}&search=${encodeURIComponent(search)}`, {
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            })
+            .then(res => res.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Replace table body
+                const newBody = doc.querySelector('#tableBody').innerHTML;
+                document.getElementById("tableBody").innerHTML = newBody;
+
+                // Replace pagination
+                const newPagination = doc.querySelector('#paginationControls').innerHTML;
+                document.getElementById("paginationControls").innerHTML = newPagination;
+
+                rebindCheckboxEvents();
+            });
+        }
+
+        function rebindCheckboxEvents() {
+            document.querySelectorAll(".row-checkbox, #selectAll").forEach(cb => {
+                cb.addEventListener("change", function () {
+                    const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
+                    const deleteBtn = document.getElementById("deleteSelectedBtn");
+                    deleteBtn.disabled = checkedBoxes.length === 0;
+
+                    const deleteModalBody = document.getElementById("deleteModalBody");
+                    if (checkedBoxes.length > 0) {
+                        deleteModalBody.innerHTML = `Are you sure you want to delete <strong>${checkedBoxes.length}</strong> event(s)?`;
+                    } else {
+                        deleteModalBody.innerHTML = `Are you sure you want to delete the selected events?`;
+                    }
+                });
+            });
+        }
     </script>
 }

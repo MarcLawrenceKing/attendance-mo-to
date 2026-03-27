@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace appdev_final_req.Controllers
 {
-    [Authorize] // Protect the whole controller
+    [Authorize]
     public class AttendanceController : Controller
     {
         private readonly ApplicationDbContext dbContext;
@@ -17,26 +17,43 @@ namespace appdev_final_req.Controllers
             this.dbContext = dbContext;
         }
 
-        // lists all events record
+        // Paginated list of events
         [HttpGet]
-        public async Task<IActionResult> List(string search)
+        public IActionResult List(string search, int page = 1, int pageSize = 5)
         {
-            var events = dbContext.Events.AsQueryable();
+            var query = dbContext.Events.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
             {
-                events = events.Where(e =>
+                query = query.Where(e =>
                     e.Title.ToLower().Contains(search.ToLower()) ||
                     e.EventDate.ToString().Contains(search)
                 );
             }
 
-            var result = await events.ToListAsync();
-            return View(result);
+            int totalEvents = query.Count();
+            int totalPages = (int)Math.Ceiling(totalEvents / (double)pageSize);
+
+            var events = query
+                .OrderBy(e => e.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            ViewBag.CurrentPage = page;
+            ViewBag.TotalPages = totalPages;
+            ViewBag.SearchQuery = search;
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return PartialView("List", events);
+            }
+
+            return View(events);
         }
 
         [HttpGet]
-        public async Task<IActionResult> MarkAttendance(int id, string? search)
+        public async Task<IActionResult> MarkAttendance(int id, string? search, int page = 1, int pageSize = 10)
         {
             var eventInfo = await dbContext.Events.FindAsync(id);
             if (eventInfo == null) return NotFound();
@@ -52,7 +69,14 @@ namespace appdev_final_req.Controllers
                 );
             }
 
-            var members = await membersQuery.ToListAsync();
+            int totalMembers = await membersQuery.CountAsync();
+            int totalPages = (int)Math.Ceiling(totalMembers / (double)pageSize);
+
+            var members = await membersQuery
+                .OrderBy(m => m.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
 
             var existing = await dbContext.Attendance
                 .Where(a => a.EventId == id)
@@ -68,26 +92,30 @@ namespace appdev_final_req.Controllers
             ViewBag.EventId = id;
             ViewBag.EventTitle = eventInfo.Title;
             ViewBag.Saved = false;
+            ViewBag.CurrentPage = page;
+            ViewBag.TotalPages = totalPages;
+            ViewBag.SearchQuery = search;
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return PartialView("MarkAttendance", viewModel);
+            }
 
             return View(viewModel);
         }
 
 
-        // this is the method when an attendance form is submitted, it takes the event id, and the list of updated attendance
+        [HttpPost]
         public async Task<IActionResult> MarkAttendance(int eventId, List<AttendanceViewModel> attendanceList)
         {
-            // store all existing attendance record in a list
             var existing = await dbContext.Attendance
                 .Where(a => a.EventId == eventId)
                 .ToListAsync();
 
-            // loop through every item and insert the updated attendance 
             foreach (var item in attendanceList)
             {
-                // check if record is already existing, this will prevent duplicates in the db
                 var record = existing.FirstOrDefault(a => a.MemberId == item.MemberId);
                 
-                // if attendance record is already existing, just update the isPresent in the db, else create a new attendance record
                 if (record != null)
                 {
                     record.IsPresent = item.IsPresent;
@@ -104,16 +132,11 @@ namespace appdev_final_req.Controllers
             }
 
             await dbContext.SaveChangesAsync();
-
             await UpdateMemberActivityStatusAsync();
 
             return RedirectToAction("List");
         }
 
-
-        // updates the isActive attribute to true if user is present for 50% of all events
-        // First UPDATE: Sets active members.
-        // Second UPDATE: Resets everyone else to inactive.
         [HttpPost]
         private async Task UpdateMemberActivityStatusAsync()
         {
