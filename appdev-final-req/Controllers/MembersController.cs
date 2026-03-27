@@ -6,6 +6,8 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using appdev_final_req.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc.ViewEngines;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 public class MembersController : Controller
 {
@@ -16,13 +18,36 @@ public class MembersController : Controller
         _context = context;
     }
 
-    public IActionResult List(string search)
+    public IActionResult List(string search, int page = 1, int pageSize = 5)
     {
-        var members = string.IsNullOrWhiteSpace(search)
-            ? _context.Members.ToList()
-            : _context.Members
-                      .Where(m => m.FullName.Contains(search) || m.Email.Contains(search) || m.Phone.Contains(search))
-                      .ToList();
+        var query = _context.Members.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            query = query.Where(m =>
+                m.FullName.Contains(search) ||
+                m.Email.Contains(search) ||
+                m.Phone.Contains(search));
+        }
+
+        int totalMembers = query.Count();
+        int totalPages = (int)Math.Ceiling(totalMembers / (double)pageSize);
+
+        var members = query
+            .OrderBy(m => m.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        ViewBag.CurrentPage = page;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.SearchQuery = search;
+
+        if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+        {
+            return PartialView("List", members);
+
+        }
 
         return View(members);
     }

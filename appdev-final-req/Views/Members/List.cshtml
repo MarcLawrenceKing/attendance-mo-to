@@ -75,6 +75,19 @@
     input[type="search"].form-control {
         border: 1px solid #ccc !important;
     }
+
+    .pagination .page-link {
+        background-color: var(--card-bg);
+        color: var(--link-color);
+        border: 1px solid var(--border-color);
+    }
+
+    .pagination .active .page-link {
+        background-color: var(--link-color);
+        color: #fff;
+        border-color: var(--link-color);
+    }
+
 </style>
 
 <h1 class="text-center">📋 Members</h1>
@@ -120,7 +133,7 @@
                 <th class="text-center">Actions</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="tableBody">
             @foreach (var member in Model)
             {
                 <tr>
@@ -138,7 +151,62 @@
                 </tr>
             }
         </tbody>
+
     </table>
+    <!-- Pagination Controls -->
+    @if (ViewBag.TotalPages > 1)
+    {
+        <nav class="d-flex justify-content-center mt-3">
+            <ul class="pagination" id="paginationControls">
+                
+                <li class="page-item @(ViewBag.CurrentPage == 1 ? "disabled" : "")">
+                    <a href="#" class="page-link" onclick="loadPage(@(ViewBag.CurrentPage - 1)); return false;">Previous</a>
+                </li>
+
+                @* Always show first page *@
+                <li class="page-item @(ViewBag.CurrentPage == 1 ? "active" : "")">
+                    <a href="#" class="page-link" onclick="loadPage(1); return false;">1</a>
+                </li>
+
+                @* Left Ellipsis *@
+                @if (ViewBag.CurrentPage > 6)
+                {
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                }
+
+                @* Pages around current (±5) *@
+                @for (int i = ViewBag.CurrentPage - 5; i <= ViewBag.CurrentPage + 5; i++)
+                {
+                    if (i > 1 && i < ViewBag.TotalPages)
+                    {
+                        <li class="page-item @(i == ViewBag.CurrentPage ? "active" : "")">
+                            <a href="#" class="page-link" onclick="loadPage(@i); return false;">@i</a>
+                        </li>
+                    }
+                }
+
+                @* Right Ellipsis *@
+                @if (ViewBag.CurrentPage < ViewBag.TotalPages - 5)
+                {
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                }
+
+                @* Last Page (only show if > 1) *@
+                @if (ViewBag.TotalPages > 1)
+                {
+                    <li class="page-item @(ViewBag.CurrentPage == ViewBag.TotalPages ? "active" : "")">
+                        <a href="#" class="page-link" onclick="loadPage(@ViewBag.TotalPages); return false;">@ViewBag.TotalPages</a>
+                    </li>
+                }
+
+                <li class="page-item @(ViewBag.CurrentPage == ViewBag.TotalPages ? "disabled" : "")">
+                    <a href="#" class="page-link" onclick="loadPage(@(ViewBag.CurrentPage + 1)); return false;">Next</a>
+                </li>
+            </ul>
+        </nav>
+
+    }
+
 </div>
 
 <!-- Import Modal -->
@@ -271,5 +339,45 @@
                 importModal.show();
             }
         });
+
+        function loadPage(page) {
+            const search = document.querySelector('input[name="search"]').value;
+
+            fetch(`/Members/List?page=${page}&search=${encodeURIComponent(search)}`, {
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            })
+            .then(res => res.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Replace table body
+                const newBody = doc.querySelector('#tableBody').innerHTML;
+                document.getElementById("tableBody").innerHTML = newBody;
+
+                // Replace pagination
+                const newPagination = doc.querySelector('#paginationControls').innerHTML;
+                document.getElementById("paginationControls").innerHTML = newPagination;
+
+                rebindCheckboxEvents();
+            });
+        }
+
+        function rebindCheckboxEvents() {
+            document.querySelectorAll(".row-checkbox, #selectAll").forEach(cb => {
+                cb.addEventListener("change", function () {
+                    const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
+                    const deleteBtn = document.getElementById("deleteSelectedBtn");
+                    deleteBtn.disabled = checkedBoxes.length === 0;
+
+                    const deleteModalBody = document.getElementById("deleteModalBody");
+                    if (checkedBoxes.length > 0) {
+                        deleteModalBody.innerHTML = `Are you sure you want to delete <strong>${checkedBoxes.length}</strong> member(s)?`;
+                    } else {
+                        deleteModalBody.innerHTML = `Are you sure you want to delete the selected members?`;
+                    }
+                });
+            });
+        }
     </script>
 }

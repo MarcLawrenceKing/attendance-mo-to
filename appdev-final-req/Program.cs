@@ -11,7 +11,7 @@ builder.Services.AddControllersWithViews();
 // we will create a sql server in the app
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
-options.UseSqlServer(builder.Configuration.GetConnectionString("CJAttendancePortal")));
+options.UseSqlServer(builder.Configuration.GetConnectionString("LinuxAttendancePortal")));
 
 // dependency injection for identity library
 builder.Services.AddIdentity<User, IdentityRole>(options =>

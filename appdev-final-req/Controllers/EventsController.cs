@@ -21,22 +21,40 @@ namespace appdev_final_req.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> List(string search)
+        public async Task<IActionResult> List(string search, int page = 1, int pageSize = 5)
         {
-            var events = dbContext.Events.AsQueryable();
+            var query = dbContext.Events.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
             {
-                events = events.Where(e =>
+                query = query.Where(e =>
                     e.Title.ToLower().Contains(search.ToLower()) ||
                     e.Description.ToLower().Contains(search.ToLower()) ||
                     e.EventDate.ToString().Contains(search)
                 );
             }
 
-            var result = await events.ToListAsync();
-            return View(result);
+            int totalEvents = await query.CountAsync();
+            int totalPages = (int)Math.Ceiling(totalEvents / (double)pageSize);
+
+            var events = await query
+                .OrderBy(e => e.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            ViewBag.CurrentPage = page;
+            ViewBag.TotalPages = totalPages;
+            ViewBag.SearchQuery = search;
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return PartialView("List", events);  // You need a partial List.cshtml view for AJAX
+            }
+
+            return View(events);
         }
+
 
         [HttpGet]
         public IActionResult Add()
